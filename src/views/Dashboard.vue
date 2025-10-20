@@ -853,6 +853,7 @@ const handleDelete = async () => {
   justify-content: center;
   z-index: 1000;
   padding: 20px;
+  overflow-y: auto;
 }
 
 .modal-content {
@@ -860,7 +861,36 @@ const handleDelete = async () => {
   border-radius: 8px;
   max-width: 500px;
   width: 100%;
+  max-height: calc(100vh - 40px);
+  display: flex;
+  flex-direction: column;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  margin: auto;
+}
+
+@media (max-height: 700px) {
+  .modal-content {
+    max-height: calc(100vh - 20px);
+  }
+  
+  .modal-overlay {
+    padding: 10px;
+    align-items: flex-start;
+  }
+}
+
+@media (max-height: 500px) {
+  .modal-header {
+    padding: 16px !important;
+  }
+  
+  .modal-body {
+    padding: 16px !important;
+  }
+  
+  .modal-footer {
+    padding: 16px !important;
+  }
 }
 
 .modal-header {
@@ -898,6 +928,8 @@ const handleDelete = async () => {
 
 .modal-body {
   padding: 24px;
+  flex: 1;
+  overflow-y: auto;
 }
 
 .modal-body p {
