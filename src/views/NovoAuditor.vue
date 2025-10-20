@@ -189,19 +189,18 @@
           
           <div class="form-grid">
             <div class="form-group col-2">
-              <label>Empresa *</label>
-              <input type="text" v-model="form.empresa" required />
+              <label>Empresa</label>
+              <input type="text" v-model="form.empresa" />
             </div>
 
             <div class="form-group col-2">
-              <label>CNPJ *</label>
+              <label>CNPJ</label>
               <input 
                 type="text" 
                 v-model="form.cnpj" 
                 @input="handleCNPJInput"
                 placeholder="00.000.000/0000-00"
                 maxlength="18"
-                required 
               />
             </div>
           </div>
