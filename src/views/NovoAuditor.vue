@@ -227,22 +227,6 @@
             </div>
 
             <div class="form-group">
-              <label>Situação</label>
-              <select v-model="form.inativo">
-                <option :value="false">Ativo</option>
-                <option :value="true">Inativo</option>
-              </select>
-            </div>
-
-            <div class="form-group">
-              <label>Qualificação</label>
-              <select v-model="form.desqualificado">
-                <option :value="false">Qualificado</option>
-                <option :value="true">Desqualificado</option>
-              </select>
-            </div>
-
-            <div class="form-group">
               <label>Revisor</label>
               <select v-model="form.revisor">
                 <option :value="true">Sim</option>
