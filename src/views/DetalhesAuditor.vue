@@ -19,7 +19,6 @@
           <div class="badges">
             <span v-if="auditor.revisor" class="badge badge-info">Revisor</span>
             <span v-if="auditor.desqualificado" class="badge badge-danger">Desqualificado</span>
-            <span v-if="auditor.inativo" class="badge badge-secondary">Inativo</span>
             <span :class="['badge', getStatusClass(auditor.auditorStatus)]">
               {{ getStatusLabel(auditor.auditorStatus) }}
             </span>
@@ -248,6 +247,77 @@
             </div>
           </div>
 
+          <!-- Sincronização Zeev -->
+          <div class="info-card zeev-card">
+            <div class="card-header">
+              <h2>
+                <img src="/zeev.png" alt="Zeev" class="zeev-logo" />
+                Sincronização Zeev
+              </h2>
+            </div>
+
+            <div v-if="zeevSinc" class="zeev-info">
+              <div class="zeev-status">
+                <div class="status-indicator" :class="{ 
+                  'status-success': zeevStatus.sincronizado && !zeevStatus.emailDiferente,
+                  'status-warning': zeevStatus.emailDiferente,
+                  'status-error': !zeevStatus.sincronizado
+                }">
+                  <i class="bi" :class="{
+                    'bi-check-circle-fill': zeevStatus.sincronizado && !zeevStatus.emailDiferente,
+                    'bi-exclamation-triangle-fill': zeevStatus.emailDiferente,
+                    'bi-x-circle-fill': !zeevStatus.sincronizado
+                  }"></i>
+                  <span v-if="zeevStatus.sincronizado && !zeevStatus.emailDiferente">
+                    Sincronizado
+                  </span>
+                  <span v-else-if="zeevStatus.emailDiferente">
+                    Email diferente
+                  </span>
+                  <span v-else>
+                    Não sincronizado
+                  </span>
+                </div>
+              </div>
+
+              <div class="zeev-details">
+                <div class="info-item">
+                  <label>ID Zeev:</label>
+                  <span>{{ zeevStatus.idZeev }}</span>
+                </div>
+                <div class="info-item">
+                  <label>Email no Zeev:</label>
+                  <span :class="{ 'text-warning': zeevStatus.emailDiferente }">
+                    {{ zeevStatus.emailZeev }}
+                  </span>
+                </div>
+                <div class="info-item" v-if="zeevStatus.emailDiferente">
+                  <label>Email no Sistema:</label>
+                  <span>{{ auditor.email }}</span>
+                </div>
+              </div>
+
+              <div v-if="zeevStatus.emailDiferente" class="alert alert-warning">
+                <i class="bi bi-exclamation-triangle"></i>
+                <strong>Atenção!</strong> O email cadastrado no Zeev é diferente do email no sistema.
+                Certifique-se de usar o mesmo email em ambos os sistemas.
+              </div>
+            </div>
+
+            <div v-else class="zeev-not-synced">
+              <p>Este parceiro ainda não está sincronizado com o Zeev.</p>
+              <ButtonLoader 
+                v-if="canEdit"
+                @click="syncWithZeev" 
+                :loading="syncingZeev"
+                class="btn btn-primary"
+              >
+                <i class="bi bi-arrow-repeat"></i>
+                Criar Sincronização
+              </ButtonLoader>
+            </div>
+          </div>
+
           <!-- Normas -->
           <div class="info-card">
             <div class="card-header">
@@ -417,8 +487,26 @@
             <h3>Ações Rápidas</h3>
             <div class="action-buttons">
               <div class="action-group">
-                <label class="action-label">Alterar Status</label>
-                <select v-model="statusSelecionado" @change="updateStatus" class="action-select">
+                <label class="action-label">
+                  Alterar Status
+                  <span v-if="updatingStatus" class="loading-indicator">
+                    <i class="bi bi-arrow-clockwise spin"></i>
+                  </span>
+                  <span v-if="auditor.desqualificado" class="blocked-indicator" title="Bloqueado: Auditor desqualificado">
+                    <i class="bi bi-lock-fill"></i>
+                  </span>
+                </label>
+                <select 
+                  v-model="statusSelecionado" 
+                  @change="updateStatus" 
+                  class="action-select"
+                  :disabled="updatingStatus || auditor.desqualificado"
+                  :class="{ 
+                    'loading': updatingStatus,
+                    'blocked': auditor.desqualificado 
+                  }"
+                  :title="auditor.desqualificado ? 'Bloqueado: Requalifique o auditor primeiro' : ''"
+                >
                   <option value="">Sem Status</option>
                   <option value="aptoAuditoria">Apto para Auditoria</option>
                   <option value="emFormacao">Em Formação</option>
@@ -428,31 +516,24 @@
               </div>
               
               <!-- Switch Revisor -->
-              <div class="switch-container" @click="confirmToggleRevisor">
+              <div 
+                class="switch-container" 
+                :class="{ 
+                  'loading': togglingRevisor,
+                  'blocked': auditor.desqualificado 
+                }"
+                @click="confirmToggleRevisor"
+                :title="auditor.desqualificado ? 'Bloqueado: Requalifique o auditor primeiro' : ''"
+              >
                 <div class="switch-info">
-                  <i class="bi bi-star"></i>
+                  <i :class="togglingRevisor ? 'bi bi-arrow-clockwise spin' : auditor.desqualificado ? 'bi bi-lock-fill' : 'bi bi-star'"></i>
                   <span>Revisor</span>
                 </div>
                 <label class="switch">
                   <input 
                     type="checkbox" 
                     :checked="auditor.revisor"
-                    @click.prevent
-                  />
-                  <span class="slider"></span>
-                </label>
-              </div>
-
-              <!-- Switch Ativo/Inativo -->
-              <div class="switch-container" @click="confirmToggleInativo">
-                <div class="switch-info">
-                  <i class="bi bi-toggle-on"></i>
-                  <span>Ativo</span>
-                </div>
-                <label class="switch">
-                  <input 
-                    type="checkbox" 
-                    :checked="!auditor.inativo"
+                    :disabled="togglingRevisor || auditor.desqualificado"
                     @click.prevent
                   />
                   <span class="slider"></span>
@@ -460,15 +541,23 @@
               </div>
 
               <!-- Switch Desqualificado -->
-              <div class="switch-container danger-switch" @click="confirmToggleDesqualificado">
+              <div 
+                class="switch-container danger-switch" 
+                :class="{ 
+                  'loading': togglingDesqualificado,
+                  'active-danger': auditor.desqualificado 
+                }"
+                @click="confirmToggleDesqualificado"
+              >
                 <div class="switch-info">
-                  <i class="bi bi-exclamation-triangle"></i>
+                  <i :class="togglingDesqualificado ? 'bi bi-arrow-clockwise spin' : 'bi bi-exclamation-triangle'"></i>
                   <span>Desqualificado</span>
                 </div>
                 <label class="switch switch-danger">
                   <input 
                     type="checkbox" 
                     :checked="auditor.desqualificado"
+                    :disabled="togglingDesqualificado"
                     @click.prevent
                   />
                   <span class="slider"></span>
@@ -625,13 +714,17 @@
             </p>
           </div>
           <div class="modal-footer">
-            <button @click="showConfirmModal = false" class="btn btn-secondary">
+            <button 
+              @click="showConfirmModal = false" 
+              class="btn btn-secondary"
+              :disabled="confirmModalLoading"
+            >
               Cancelar
             </button>
             <ButtonLoader
               @click="confirmModal.action"
               :variant="confirmModal.isDanger ? 'danger' : 'primary'"
-              :loading="updating"
+              :loading="confirmModalLoading"
             >
               {{ confirmModal.confirmText }}
             </ButtonLoader>
@@ -720,6 +813,7 @@ import { useHistoricoStore } from '../stores/historico';
 import { usePricingStore } from '../stores/pricing';
 import { useProdutosStore } from '../stores/produtos';
 import { useAuthStore } from '../stores/auth';
+import { useZeevStore } from '../stores/zeev';
 import { useToast } from '../composables/useToast';
 import AppHeader from '../components/AppHeader.vue';
 import LoadingOverlay from '../components/LoadingOverlay.vue';
@@ -734,6 +828,7 @@ const historicoStore = useHistoricoStore();
 const pricingStore = usePricingStore();
 const produtosStore = useProdutosStore();
 const authStore = useAuthStore();
+const zeevStore = useZeevStore();
 const toast = useToast();
 
 const loading = ref(false);
@@ -742,6 +837,10 @@ const updating = ref(false);
 const adding = ref(false);
 const editMode = ref(false);
 const historicoCarregado = ref(false);
+const updatingStatus = ref(false);
+const togglingRevisor = ref(false);
+const togglingDesqualificado = ref(false);
+const confirmModalLoading = ref(false);
 const showAddNorma = ref(false);
 const showAddNace = ref(false);
 const selectedNormaId = ref(null);
@@ -776,9 +875,24 @@ const showPaisDropdown = ref(false);
 const showEstadoDropdown = ref(false);
 const showCidadeDropdown = ref(false);
 const auditor = ref(null);
+const zeevSinc = ref(null);
+const syncingZeev = ref(false);
 
 const canEdit = computed(() => authStore.hasRole('editAuditors'));
 const canViewHistory = computed(() => authStore.hasRole('historyAuditors'));
+
+const zeevStatus = computed(() => {
+  if (!zeevSinc.value) return { sincronizado: false, emailDiferente: false };
+  
+  const emailDiferente = zeevSinc.value.email.toLowerCase() !== auditor.value?.email?.toLowerCase();
+  
+  return {
+    sincronizado: zeevSinc.value.statusSinc,
+    emailDiferente: emailDiferente,
+    emailZeev: zeevSinc.value.email,
+    idZeev: zeevSinc.value.idZeev
+  };
+});
 
 const historicoAuditor = computed(() => {
   if (!auditor.value) return [];
@@ -818,9 +932,10 @@ const nacesDisponiveisFiltered = computed(() => {
 const pricing = computed(() => pricingStore.pricing || []);
 
 const produtosDisponiveis = computed(() => {
-  if (!Array.isArray(pricing.value)) return produtosStore.produtos;
+  const produtos = produtosStore.getProdutos;
+  if (!Array.isArray(pricing.value)) return produtos;
   const produtosComPreco = pricing.value.map(p => String(p.produtoId));
-  return produtosStore.produtos.filter(p => !produtosComPreco.includes(String(p.id)));
+  return produtos.filter(p => !produtosComPreco.includes(String(p.id)));
 });
 
 const paisesFiltered = computed(() => {
@@ -1039,6 +1154,9 @@ onMounted(async () => {
       throw new Error('Auditor não encontrado');
     }
 
+    // Carregar sincronização com Zeev
+    zeevSinc.value = await zeevStore.fetchSincronizacao(route.params.id);
+
     editForm.value = { ...auditor.value };
     statusSelecionado.value = auditor.value?.auditorStatus || 'aptoAuditoria';
     
@@ -1085,6 +1203,8 @@ onBeforeUnmount(() => {
   auditor.value = null;
   auditoresStore.auditorAtual = null;
   pricingStore.clearPricing();
+  zeevStore.clearSincronizacao();
+  zeevSinc.value = null;
   historicoCarregado.value = false;
 });
 
@@ -1120,6 +1240,9 @@ watch(() => route.params.id, async (newId, oldId) => {
 
       editForm.value = { ...auditor.value };
       statusSelecionado.value = auditor.value?.auditorStatus || 'aptoAuditoria';
+      
+      // Carregar sincronização com Zeev
+      zeevSinc.value = await zeevStore.fetchSincronizacao(newId);
       
       if (authStore.hasRole('viewPricingAuditors')) {
         await pricingStore.fetchPricing(newId);
@@ -1165,10 +1288,39 @@ const loadHistory = async () => {
   }
 };
 
+const syncWithZeev = async () => {
+  syncingZeev.value = true;
+  try {
+    await zeevStore.createSincronizacao(auditor.value.id, auditor.value.email);
+    zeevSinc.value = await zeevStore.fetchSincronizacao(auditor.value.id);
+    toast.success('Sincronização com Zeev criada com sucesso');
+  } catch (error) {
+    toast.error('Erro ao sincronizar com Zeev');
+  } finally {
+    syncingZeev.value = false;
+  }
+};
+
 const handleUpdate = async () => {
   updating.value = true;
   try {
+    // Garante que os valores de busca sejam sincronizados com o editForm
+    // se o usuário não alterou via dropdown
+    if (!editForm.value.pais && paisSearch.value) {
+      editForm.value.pais = paisSearch.value;
+    }
+    if (!editForm.value.estado && estadoSearch.value) {
+      editForm.value.estado = estadoSearch.value;
+    }
+    if (!editForm.value.cidade && cidadeSearch.value) {
+      editForm.value.cidade = cidadeSearch.value;
+    }
+    
     await auditoresStore.updateAuditor(auditor.value.id, editForm.value);
+    // Recarrega os dados do auditor
+    await auditoresStore.fetchAuditor(auditor.value.id);
+    auditor.value = auditoresStore.auditorAtual;
+    editForm.value = { ...auditor.value };
     toast.success('Auditor atualizado');
     editMode.value = false;
   } catch (error) {
@@ -1183,6 +1335,9 @@ const addNorma = async () => {
   adding.value = true;
   try {
     await auditoresStore.addNorma(auditor.value.id, selectedNormaId.value);
+    // Recarrega os dados do auditor
+    await auditoresStore.fetchAuditor(auditor.value.id);
+    auditor.value = auditoresStore.auditorAtual;
     toast.success('Norma adicionada');
     showAddNorma.value = false;
     selectedNormaId.value = null;
@@ -1196,6 +1351,9 @@ const addNorma = async () => {
 const removeNorma = async (normaId) => {
   try {
     await auditoresStore.removeNorma(auditor.value.id, normaId);
+    // Recarrega os dados do auditor
+    await auditoresStore.fetchAuditor(auditor.value.id);
+    auditor.value = auditoresStore.auditorAtual;
     toast.success('Norma removida');
   } catch (error) {
     toast.error('Erro ao remover norma');
@@ -1207,6 +1365,9 @@ const addNace = async () => {
   adding.value = true;
   try {
     await auditoresStore.addNace(auditor.value.id, selectedNaceId.value);
+    // Recarrega os dados do auditor
+    await auditoresStore.fetchAuditor(auditor.value.id);
+    auditor.value = auditoresStore.auditorAtual;
     toast.success('NACE adicionado');
     showAddNace.value = false;
     selectedNaceId.value = null;
@@ -1220,6 +1381,9 @@ const addNace = async () => {
 const removeNace = async (naceId) => {
   try {
     await auditoresStore.removeNace(auditor.value.id, naceId);
+    // Recarrega os dados do auditor
+    await auditoresStore.fetchAuditor(auditor.value.id);
+    auditor.value = auditoresStore.auditorAtual;
     toast.success('NACE removido');
   } catch (error) {
     toast.error('Erro ao remover NACE');
@@ -1227,18 +1391,42 @@ const removeNace = async (naceId) => {
 };
 
 const updateStatus = async () => {
+  if (auditor.value.desqualificado) {
+    toast.warning('Não é possível alterar o status de um auditor desqualificado');
+    return;
+  }
+  
+  updatingStatus.value = true;
   try {
     await auditoresStore.updateAuditor(auditor.value.id, {
       ...auditor.value,
       auditorStatus: statusSelecionado.value,
     });
+    // Recarrega os dados do auditor
+    await auditoresStore.fetchAuditor(auditor.value.id);
+    auditor.value = auditoresStore.auditorAtual;
     toast.success('Status atualizado com sucesso');
   } catch (error) {
     toast.error('Erro ao atualizar status');
+  } finally {
+    updatingStatus.value = false;
   }
 };
 
 const confirmToggleRevisor = () => {
+  console.log('confirmToggleRevisor chamado');
+  console.log('togglingRevisor:', togglingRevisor.value);
+  console.log('auditor.desqualificado:', auditor.value?.desqualificado);
+  console.log('auditor.revisor:', auditor.value?.revisor);
+  
+  if (togglingRevisor.value) return;
+  
+  // Bloqueia se estiver desqualificado e tentando ativar revisor
+  if (auditor.value.desqualificado && !auditor.value.revisor) {
+    toast.warning('Não é possível tornar revisor um auditor desqualificado. Requalifique primeiro.');
+    return;
+  }
+  
   const isRevisor = auditor.value.revisor;
   confirmModal.value = {
     title: isRevisor ? 'Remover Status de Revisor' : 'Tornar Revisor',
@@ -1249,32 +1437,21 @@ const confirmToggleRevisor = () => {
     confirmText: isRevisor ? 'Remover' : 'Confirmar',
     isDanger: isRevisor,
     action: async () => {
+      confirmModalLoading.value = true;
       await toggleRevisor();
+      confirmModalLoading.value = false;
       showConfirmModal.value = false;
     }
   };
+  
+  console.log('Abrindo modal, confirmModal:', confirmModal.value);
   showConfirmModal.value = true;
-};
-
-const confirmToggleInativo = () => {
-  const isInativo = auditor.value.inativo;
-  confirmModal.value = {
-    title: isInativo ? 'Ativar Parceiro' : 'Inativar Parceiro',
-    message: isInativo
-      ? `Deseja ativar ${auditor.value.nome}?`
-      : `Deseja inativar ${auditor.value.nome}?`,
-    warning: isInativo ? 'O parceiro voltará a aparecer nas listagens ativas.' : 'O parceiro não aparecerá mais nas listagens ativas.',
-    confirmText: isInativo ? 'Ativar' : 'Inativar',
-    isDanger: !isInativo,
-    action: async () => {
-      await toggleInativo();
-      showConfirmModal.value = false;
-    }
-  };
-  showConfirmModal.value = true;
+  console.log('showConfirmModal definido como true');
 };
 
 const confirmToggleDesqualificado = () => {
+  if (togglingDesqualificado.value) return;
+  
   const isDesqualificado = auditor.value.desqualificado;
   confirmModal.value = {
     title: isDesqualificado ? 'Requalificar Parceiro' : 'Desqualificar Parceiro',
@@ -1285,7 +1462,9 @@ const confirmToggleDesqualificado = () => {
     confirmText: isDesqualificado ? 'Requalificar' : 'Desqualificar',
     isDanger: !isDesqualificado,
     action: async () => {
+      confirmModalLoading.value = true;
       await toggleDesqualificado();
+      confirmModalLoading.value = false;
       showConfirmModal.value = false;
     }
   };
@@ -1293,38 +1472,59 @@ const confirmToggleDesqualificado = () => {
 };
 
 const toggleRevisor = async () => {
+  togglingRevisor.value = true;
   try {
+    const novoValor = !auditor.value.revisor;
     await auditoresStore.updateAuditor(auditor.value.id, {
       ...auditor.value,
-      revisor: !auditor.value.revisor,
+      revisor: novoValor,
     });
-    toast.success(auditor.value.revisor ? 'Revisor removido' : 'Parceiro agora é revisor');
+    // Recarrega os dados do auditor
+    await auditoresStore.fetchAuditor(auditor.value.id);
+    auditor.value = auditoresStore.auditorAtual;
+    toast.success(novoValor ? 'Parceiro agora é revisor' : 'Revisor removido');
   } catch (error) {
     toast.error('Erro ao atualizar');
-  }
-};
-
-const toggleInativo = async () => {
-  try {
-    await auditoresStore.updateAuditor(auditor.value.id, {
-      ...auditor.value,
-      inativo: !auditor.value.inativo,
-    });
-    toast.success(auditor.value.inativo ? 'Parceiro ativado' : 'Parceiro inativado');
-  } catch (error) {
-    toast.error('Erro ao atualizar');
+  } finally {
+    togglingRevisor.value = false;
   }
 };
 
 const toggleDesqualificado = async () => {
+  togglingDesqualificado.value = true;
   try {
-    await auditoresStore.updateAuditor(auditor.value.id, {
+    const novoValor = !auditor.value.desqualificado;
+    
+    // Se estiver desqualificando, remove revisor e altera status
+    const dadosAtualizados = {
       ...auditor.value,
-      desqualificado: !auditor.value.desqualificado,
-    });
-    toast.success(auditor.value.desqualificado ? 'Parceiro requalificado' : 'Parceiro desqualificado');
+      desqualificado: novoValor,
+    };
+    
+    if (novoValor) {
+      // Desqualificando: remove revisor e altera status para inativo
+      dadosAtualizados.revisor = false;
+      dadosAtualizados.auditorStatus = 'auditorInativo';
+    }
+    
+    await auditoresStore.updateAuditor(auditor.value.id, dadosAtualizados);
+    
+    // Recarrega os dados do auditor
+    await auditoresStore.fetchAuditor(auditor.value.id);
+    auditor.value = auditoresStore.auditorAtual;
+    
+    // Atualiza o status selecionado no select
+    statusSelecionado.value = auditor.value.auditorStatus || '';
+    
+    if (novoValor) {
+      toast.success('Parceiro desqualificado e removido de revisor');
+    } else {
+      toast.success('Parceiro requalificado');
+    }
   } catch (error) {
     toast.error('Erro ao atualizar');
+  } finally {
+    togglingDesqualificado.value = false;
   }
 };
 
@@ -1394,7 +1594,9 @@ const confirmDeletePrice = (item) => {
     confirmText: 'Remover',
     isDanger: true,
     action: async () => {
+      confirmModalLoading.value = true;
       await deletePrice(item);
+      confirmModalLoading.value = false;
       showConfirmModal.value = false;
     }
   };
@@ -1898,6 +2100,25 @@ const formatDate = (date) => {
   background: #e9ecef;
 }
 
+.switch-container.blocked {
+  background: #f5f5f5;
+  border: 2px solid #ccc;
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.switch-container.blocked:hover {
+  background: #f5f5f5;
+}
+
+.switch-container.blocked .switch-info {
+  color: #999;
+}
+
+.switch-container.blocked .switch-info i {
+  color: #999;
+}
+
 .switch-info {
   display: flex;
   align-items: center;
@@ -1955,11 +2176,16 @@ input:checked + .slider {
 }
 
 input:checked + .slider.slider-danger {
-  background-color: #dc3545;
+  background: linear-gradient(135deg, #dc3545 0%, #c62828 100%);
+  box-shadow: 0 0 10px rgba(220, 53, 69, 0.6), inset 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
 input:focus + .slider {
   box-shadow: 0 0 1px #e70d0c;
+}
+
+input:focus + .slider.slider-danger {
+  box-shadow: 0 0 10px rgba(220, 53, 69, 0.8);
 }
 
 input:checked + .slider:before {
@@ -2000,6 +2226,109 @@ input:checked + .slider:before {
   outline: none;
   border-color: #e70d0c;
   background: white;
+}
+
+.action-select:disabled,
+.action-select.loading {
+  opacity: 0.6;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.action-select.blocked {
+  background: #f5f5f5;
+  border-color: #999;
+  color: #999;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.action-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.loading-indicator {
+  color: #e70d0c;
+  font-size: 14px;
+}
+
+.blocked-indicator {
+  color: #999;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+}
+
+.switch-container.loading {
+  opacity: 0.7;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.switch-container.loading .switch-info i {
+  color: #e70d0c;
+}
+
+/* Estilo perigoso quando desqualificado está ativo */
+.switch-container.active-danger {
+  background: linear-gradient(135deg, #ffebee 0%, #ffcdd2 100%);
+  border: 2px solid #dc3545;
+  box-shadow: 0 0 15px rgba(220, 53, 69, 0.3);
+  animation: pulse-danger 2s ease-in-out infinite;
+}
+
+.switch-container.active-danger .switch-info {
+  color: #c62828;
+  font-weight: 600;
+}
+
+.switch-container.active-danger .switch-info i {
+  color: #dc3545;
+  font-size: 18px;
+  animation: shake 0.5s ease-in-out infinite;
+}
+
+.switch-container.active-danger:hover {
+  background: linear-gradient(135deg, #ffcdd2 0%, #ef9a9a 100%);
+  border-color: #c62828;
+  box-shadow: 0 0 20px rgba(220, 53, 69, 0.5);
+}
+
+@keyframes pulse-danger {
+  0%, 100% {
+    box-shadow: 0 0 15px rgba(220, 53, 69, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 25px rgba(220, 53, 69, 0.5);
+  }
+}
+
+@keyframes shake {
+  0%, 100% {
+    transform: translateX(0) rotate(0deg);
+  }
+  25% {
+    transform: translateX(-2px) rotate(-3deg);
+  }
+  75% {
+    transform: translateX(2px) rotate(3deg);
+  }
+}
+
+.spin {
+  display: inline-block;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
 }
 
 .load-history {
@@ -2634,6 +2963,124 @@ input:checked + .slider:before {
   color: #666;
   margin-bottom: 24px;
   font-size: 16px;
+}
+
+/* Zeev Sync Styles */
+.zeev-card .zeev-logo {
+  height: 24px;
+  margin-right: 8px;
+  vertical-align: middle;
+}
+
+.zeev-info {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.zeev-status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.status-indicator i {
+  font-size: 20px;
+}
+
+.status-success {
+  background: #d4edda;
+  color: #155724;
+}
+
+.status-warning {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.status-error {
+  background: #f8d7da;
+  color: #721c24;
+}
+
+.zeev-details {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  background: #f8f9fa;
+  border-radius: 8px;
+}
+
+.zeev-details .info-item {
+  display: flex;
+  gap: 8px;
+}
+
+.zeev-details .info-item label {
+  font-weight: 600;
+  color: #666;
+  min-width: 140px;
+}
+
+.zeev-details .info-item span {
+  color: #333;
+}
+
+.zeev-details .info-item .text-warning {
+  color: #856404;
+  font-weight: 600;
+}
+
+.alert {
+  padding: 12px 16px;
+  border-radius: 8px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 14px;
+}
+
+.alert-warning {
+  background: #fff3cd;
+  border: 1px solid #ffeeba;
+  color: #856404;
+}
+
+.alert i {
+  font-size: 18px;
+  margin-top: 2px;
+}
+
+.alert strong {
+  margin-right: 4px;
+}
+
+.zeev-not-synced {
+  text-align: center;
+  padding: 30px 20px;
+}
+
+.zeev-not-synced p {
+  color: #666;
+  margin-bottom: 20px;
+  font-size: 15px;
+}
+
+.zeev-not-synced .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 @media (max-width: 968px) {

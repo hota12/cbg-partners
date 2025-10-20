@@ -87,6 +87,7 @@
               <select v-model="produtoForm.unidade">
                 <option value="">Selecione</option>
                 <option value="HD">HD</option>
+                <option value="AUDITORIA">AUDITORIA</option>
               </select>
             </div>
 
@@ -222,7 +223,7 @@ const availableIcons = ref([
   { class: 'bi bi-reception-4', label: 'Sinal' },
 ]);
 
-const produtos = computed(() => produtosStore.produtos);
+const produtos = computed(() => produtosStore.getProdutos);
 const canEdit = computed(() => authStore.hasRole('editProducts'));
 
 onMounted(async () => {

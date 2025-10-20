@@ -354,7 +354,7 @@
                   :key="produto.id" 
                   :value="produto.id"
                 >
-                  {{ produto.nome }}
+                  {{ produto.nome }}{{ produto.unidade ? ` (${produto.unidade})` : '' }}
                 </option>
               </select>
               <input 
@@ -478,8 +478,9 @@ const cidadesFiltered = computed(() => {
 });
 
 const produtosDisponiveis = computed(() => {
+  const produtos = produtosStore.getProdutos;
   const produtosAdicionados = selectedPricing.value.map(p => String(p.produtoId));
-  return produtosStore.produtos.filter(p => !produtosAdicionados.includes(String(p.id)));
+  return produtos.filter(p => !produtosAdicionados.includes(String(p.id)));
 });
 const filteredNaces = computed(() => {
   if (!naceSearch.value) return nacesStore.naces;

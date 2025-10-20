@@ -7,14 +7,19 @@ export const usePricingStore = defineStore('pricing', {
     loading: false,
   }),
 
+  getters: {
+    getPricing: (state) => Array.isArray(state.pricing) ? state.pricing : [],
+  },
+
   actions: {
     async fetchPricing(auditorId) {
       this.loading = true;
       try {
         const { data } = await api.get(`/auditors/pricing?id=${auditorId}`);
-        this.pricing = data;
+        this.pricing = Array.isArray(data) ? data : [];
       } catch (error) {
         console.error('Erro ao buscar pricing:', error);
+        this.pricing = [];
         throw error;
       } finally {
         this.loading = false;

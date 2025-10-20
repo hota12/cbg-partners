@@ -12,9 +12,10 @@ export const useProdutosStore = defineStore('produtos', {
       this.loading = true;
       try {
         const { data } = await api.get('/products');
-        this.produtos = data;
+        this.produtos = Array.isArray(data) ? data : [];
       } catch (error) {
         console.error('Erro ao buscar produtos:', error);
+        this.produtos = []; // Garante que sempre seja um array
         throw error;
       } finally {
         this.loading = false;
@@ -75,5 +76,9 @@ export const useProdutosStore = defineStore('produtos', {
         this.loading = false;
       }
     },
+  },
+
+  getters: {
+    getProdutos: (state) => Array.isArray(state.produtos) ? state.produtos : [],
   },
 });

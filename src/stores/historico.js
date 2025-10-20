@@ -8,8 +8,10 @@ export const useHistoricoStore = defineStore('historico', {
   }),
 
   getters: {
+    getHistorico: (state) => Array.isArray(state.historico) ? state.historico : [],
     historicoByAuditor: (state) => (auditorId) => {
-      return state.historico.filter(h => h.auditorId === String(auditorId));
+      const historico = Array.isArray(state.historico) ? state.historico : [];
+      return historico.filter(h => h.auditorId === String(auditorId));
     },
   },
 
@@ -21,9 +23,10 @@ export const useHistoricoStore = defineStore('historico', {
           ? `/auditors/history?id=${auditorId}` 
           : '/auditors/history';
         const { data } = await api.get(url);
-        this.historico = data;
+        this.historico = Array.isArray(data) ? data : [];
       } catch (error) {
         console.error('Erro ao buscar histórico:', error);
+        this.historico = [];
         throw error;
       } finally {
         this.loading = false;

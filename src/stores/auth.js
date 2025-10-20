@@ -50,6 +50,11 @@ export const useAuthStore = defineStore('auth', {
       this.token = null;
       localStorage.removeItem('token');
       localStorage.removeItem('user');
+      
+      // Limpa caches de sessão (normas e naces)
+      sessionStorage.removeItem('normas_cache');
+      sessionStorage.removeItem('naces_cache');
+      console.log('Caches de sessão limpos no logout');
     },
   },
 });

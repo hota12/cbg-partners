@@ -14,6 +14,44 @@
         </router-link>
       </div>
 
+      <!-- Alerta Zeev -->
+      <div v-if="hasRole('zeevAuditors') && auditoresNaoSincronizados > 0" class="zeev-alert">
+        <div class="alert-icon">
+          <i class="bi bi-exclamation-triangle-fill"></i>
+        </div>
+        <div class="alert-content">
+          <strong>Atenção!</strong>
+          <span>
+            {{ auditoresNaoSincronizados }} 
+            {{ auditoresNaoSincronizados === 1 ? 'parceiro não está sincronizado' : 'parceiros não estão sincronizados' }} 
+            com o Zeev
+          </span>
+        </div>
+        <img src="/zeev.png" alt="Zeev" class="zeev-alert-logo" />
+        
+        <!-- Tooltip com lista de auditores -->
+        <div class="zeev-tooltip">
+          <div class="tooltip-header">
+            <strong>Parceiros não sincronizados:</strong>
+          </div>
+          <div class="tooltip-list">
+            <router-link 
+              v-for="auditor in auditoresNaoSincDetalhes" 
+              :key="auditor.id"
+              :to="`/auditor/${auditor.id}`"
+              class="tooltip-item"
+            >
+              <i class="bi bi-person-circle"></i>
+              <div class="tooltip-info">
+                <span class="tooltip-nome">{{ auditor.nome }}</span>
+                <span class="tooltip-email">{{ auditor.email }}</span>
+              </div>
+              <i class="bi bi-chevron-right"></i>
+            </router-link>
+          </div>
+        </div>
+      </div>
+
       <!-- Filtros -->
       <div class="filters-card">
         <div class="filters-header">
@@ -87,15 +125,6 @@
               <option v-for="nace in naces" :key="nace.id" :value="String(nace.id)">
                 {{ nace.nace }} - {{ nace.descricao }}
               </option>
-            </select>
-          </div>
-
-          <div class="filter-group">
-            <label>Situação</label>
-            <select v-model="filters.inativo" @change="handleFilterChange">
-              <option :value="null">Todos</option>
-              <option :value="false">Ativos</option>
-              <option :value="true">Inativos</option>
             </select>
           </div>
 
@@ -284,6 +313,7 @@ import { useAuditoresStore } from '../stores/auditores';
 import { useNormasStore } from '../stores/normas';
 import { useNacesStore } from '../stores/naces';
 import { useAuthStore } from '../stores/auth';
+import { useZeevStore } from '../stores/zeev';
 import { useToast } from '../composables/useToast';
 import AppHeader from '../components/AppHeader.vue';
 import LoadingOverlay from '../components/LoadingOverlay.vue';
@@ -293,6 +323,7 @@ const auditoresStore = useAuditoresStore();
 const normasStore = useNormasStore();
 const nacesStore = useNacesStore();
 const authStore = useAuthStore();
+const zeevStore = useZeevStore();
 const toast = useToast();
 
 const loading = ref(false);
@@ -307,7 +338,6 @@ const filters = ref({
   auditorStatus: '',
   normaId: '',
   naceId: '',
-  inativo: null,
   revisor: null,
   iaf: '',
   desqualificado: null,
@@ -318,14 +348,50 @@ const normas = computed(() => normasStore.normas);
 const naces = computed(() => nacesStore.naces);
 const hasRole = (role) => authStore.hasRole(role);
 
+const auditoresNaoSincronizados = computed(() => {
+  if (!hasRole('zeevAuditors')) return 0;
+  
+  const sincronizacoes = zeevStore.getSincronizacoes;
+  
+  // Conta apenas sincronizações com statusSinc false
+  // (não conta auditores que nunca foram sincronizados)
+  return sincronizacoes.filter(s => s.statusSinc === false).length;
+});
+
+const auditoresNaoSincDetalhes = computed(() => {
+  if (!hasRole('zeevAuditors')) return [];
+  
+  const sincronizacoes = zeevStore.getSincronizacoes;
+  const auditores = auditoresStore.auditores;
+  
+  // Retorna detalhes dos auditores não sincronizados
+  return sincronizacoes
+    .filter(s => s.statusSinc === false)
+    .map(sinc => {
+      const auditor = auditores.find(a => String(a.id) === sinc.auditorId);
+      return {
+        id: sinc.auditorId,
+        nome: auditor?.nome || 'Auditor não encontrado',
+        email: sinc.email
+      };
+    });
+});
+
 onMounted(async () => {
   loading.value = true;
   try {
-    await Promise.all([
+    const promises = [
       auditoresStore.fetchAuditores(),
       normasStore.fetchNormas(),
       nacesStore.fetchNaces(),
-    ]);
+    ];
+    
+    // Se tem permissão Zeev, carrega sincronizações
+    if (hasRole('zeevAuditors')) {
+      promises.push(zeevStore.fetchAllSincronizacoes());
+    }
+    
+    await Promise.all(promises);
   } catch (error) {
     toast.error('Erro ao carregar dados');
   } finally {
@@ -340,7 +406,6 @@ const handleFilterChange = () => {
   auditoresStore.setFilter('auditorStatus', filters.value.auditorStatus);
   auditoresStore.setFilter('normaId', filters.value.normaId);
   auditoresStore.setFilter('naceId', filters.value.naceId);
-  auditoresStore.setFilter('inativo', filters.value.inativo);
   auditoresStore.setFilter('revisor', filters.value.revisor);
   auditoresStore.setFilter('iaf', filters.value.iaf);
   auditoresStore.setFilter('desqualificado', filters.value.desqualificado);
@@ -354,7 +419,6 @@ const clearFilters = () => {
     auditorStatus: '',
     normaId: '',
     naceId: '',
-    inativo: null,
     revisor: null,
     iaf: '',
     desqualificado: null,
@@ -856,6 +920,173 @@ const handleDelete = async () => {
   border-top: 1px solid #eee;
 }
 
+/* Zeev Alert */
+.zeev-alert {
+  background: linear-gradient(135deg, #fff3cd 0%, #ffeeba 100%);
+  border: 1px solid #ffc107;
+  border-radius: 8px;
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 4px rgba(255, 193, 7, 0.1);
+  position: relative;
+  cursor: pointer;
+}
+
+.zeev-alert .alert-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  background: rgba(255, 193, 7, 0.2);
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.zeev-alert .alert-icon i {
+  color: #856404;
+  font-size: 20px;
+}
+
+.zeev-alert .alert-content {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.zeev-alert .alert-content strong {
+  color: #856404;
+  font-weight: 600;
+}
+
+.zeev-alert .alert-content span {
+  color: #856404;
+  font-size: 14px;
+}
+
+.zeev-alert-logo {
+  height: 28px;
+  opacity: 0.8;
+  flex-shrink: 0;
+}
+
+/* Tooltip */
+.zeev-tooltip {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  background: white;
+  border: 1px solid #ffc107;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-10px);
+  transition: all 0.3s ease;
+  max-height: 300px;
+  overflow: hidden;
+}
+
+.zeev-alert:hover .zeev-tooltip {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+.tooltip-header {
+  padding: 12px 16px;
+  background: #f8f9fa;
+  border-bottom: 1px solid #eee;
+}
+
+.tooltip-header strong {
+  color: #333;
+  font-size: 13px;
+}
+
+.tooltip-list {
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.tooltip-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  text-decoration: none;
+  color: inherit;
+  border-bottom: 1px solid #f0f0f0;
+  transition: all 0.2s;
+}
+
+.tooltip-item:last-child {
+  border-bottom: none;
+}
+
+.tooltip-item:hover {
+  background: #f8f9fa;
+}
+
+.tooltip-item > i:first-child {
+  font-size: 24px;
+  color: #666;
+  flex-shrink: 0;
+}
+
+.tooltip-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tooltip-nome {
+  font-weight: 600;
+  color: #333;
+  font-size: 14px;
+}
+
+.tooltip-email {
+  font-size: 12px;
+  color: #666;
+}
+
+.tooltip-item > i:last-child {
+  color: #999;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.tooltip-item:hover > i:last-child {
+  color: #e70d0c;
+  transform: translateX(2px);
+}
+
+.tooltip-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.tooltip-list::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+.tooltip-list::-webkit-scrollbar-thumb {
+  background: #ccc;
+  border-radius: 3px;
+}
+
+.tooltip-list::-webkit-scrollbar-thumb:hover {
+  background: #999;
+}
+
 @media (max-width: 768px) {
   .dashboard-header {
     flex-direction: column;
@@ -874,6 +1105,16 @@ const handleDelete = async () => {
   .auditores-table th,
   .auditores-table td {
     padding: 10px 12px;
+  }
+  
+  .zeev-alert {
+    flex-direction: column;
+    align-items: flex-start;
+    text-align: left;
+  }
+  
+  .zeev-alert-logo {
+    align-self: flex-end;
   }
 }
 </style>
