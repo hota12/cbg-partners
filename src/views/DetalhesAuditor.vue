@@ -655,7 +655,10 @@
             </div>
             
             <div v-if="selectedNormaId" class="norma-options">
-              <h4>Qualificações para esta norma:</h4>
+              <h4>
+                Qualificações para esta norma: 
+                <span class="required-text">(selecione pelo menos uma) *</span>
+              </h4>
               <div class="checkbox-options">
                 <label class="checkbox-option">
                   <input 
@@ -712,7 +715,10 @@
             </div>
             
             <div class="norma-options">
-              <h4>Qualificações:</h4>
+              <h4>
+                Qualificações: 
+                <span class="required-text">(selecione pelo menos uma) *</span>
+              </h4>
               <div class="checkbox-options">
                 <label class="checkbox-option">
                   <input 
@@ -772,6 +778,15 @@
                 </option>
               </select>
             </div>
+            
+            <div v-if="nacesDisponiveisFiltered.length > 0" class="nace-summary">
+              <span class="summary-text">
+                <i class="bi bi-info-circle"></i>
+                Mostrando {{ nacesDisponiveisFiltered.length }} NACE{{ nacesDisponiveisFiltered.length !== 1 ? 's' : '' }}
+                <span v-if="selectedIafFilter"> do IAF {{ selectedIafFilter }}</span>
+              </span>
+            </div>
+            
             <div class="selection-list">
               <label 
                 v-for="nace in nacesDisponiveisFiltered" 
@@ -785,6 +800,7 @@
                 />
                 <span>
                   <strong>{{ nace.nace }}</strong> - {{ nace.descricao }}
+                  <small class="iaf-badge-modal">IAF {{ nace.iaf }}</small>
                 </span>
               </label>
             </div>
@@ -1445,6 +1461,13 @@ const handleUpdate = async () => {
 
 const addNorma = async () => {
   if (!selectedNormaId.value) return;
+  
+  // Validação: precisa ser pelo menos Líder OU Especialista
+  if (!normaQualificacoes.value.auditorLider && !normaQualificacoes.value.especialista) {
+    toast.error('Selecione pelo menos uma qualificação: Auditor Líder ou Especialista');
+    return;
+  }
+  
   adding.value = true;
   try {
     await auditoresStore.addNorma(
@@ -1478,6 +1501,13 @@ const openEditNorma = (norma) => {
 
 const updateNorma = async () => {
   if (!editingNorma.value) return;
+  
+  // Validação: precisa ser pelo menos Líder OU Especialista
+  if (!editNormaQualificacoes.value.auditorLider && !editNormaQualificacoes.value.especialista) {
+    toast.error('Selecione pelo menos uma qualificação: Auditor Líder ou Especialista');
+    return;
+  }
+  
   updating.value = true;
   try {
     // Usa a mesma rota de adicionar - ela atualizará se a associação já existir
@@ -2756,6 +2786,41 @@ input:checked + .slider:before {
   box-shadow: 0 0 0 3px rgba(231, 13, 12, 0.1);
 }
 
+.nace-summary {
+  display: flex;
+  align-items: center;
+  padding: 12px;
+  background: #f0f7ff;
+  border: 1px solid #b3d9ff;
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+.summary-text {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: #0056b3;
+  font-weight: 500;
+}
+
+.summary-text i {
+  font-size: 16px;
+}
+
+.iaf-badge-modal {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 3px 8px;
+  background: #e3f2fd;
+  color: #1976d2;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
 .selection-list {
   display: flex;
   flex-direction: column;
@@ -2796,6 +2861,17 @@ input:checked + .slider:before {
   font-weight: 600;
   color: #333;
   margin: 0 0 16px 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.required-text {
+  font-size: 13px;
+  font-weight: 500;
+  color: #dc3545;
+  font-style: italic;
 }
 
 .checkbox-options {

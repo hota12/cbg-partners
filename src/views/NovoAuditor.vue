@@ -254,6 +254,9 @@
               </label>
               
               <div v-if="selectedNormas.includes(norma.id)" class="norma-qualificacoes">
+                <div class="qualificacoes-header">
+                  <span class="qualificacoes-required">* Selecione pelo menos uma qualificação:</span>
+                </div>
                 <label class="qualificacao-checkbox">
                   <input 
                     type="checkbox" 
@@ -289,13 +292,33 @@
           </h2>
           
           <div class="nace-selection">
-            <div class="search-box">
-              <i class="bi bi-search"></i>
-              <input 
-                type="text" 
-                v-model="naceSearch"
-                placeholder="Buscar NACE..."
-              />
+            <div class="nace-filters">
+              <div class="search-box">
+                <i class="bi bi-search"></i>
+                <input 
+                  type="text" 
+                  v-model="naceSearch"
+                  placeholder="Buscar NACE..."
+                />
+              </div>
+              
+              <select v-model="selectedIafFilter" class="iaf-filter-select">
+                <option value="">Todos os IAFs</option>
+                <option v-for="iaf in iafsDisponiveis" :key="iaf" :value="iaf">
+                  IAF {{ iaf }}
+                </option>
+              </select>
+              
+              <button 
+                v-if="selectedIafFilter" 
+                @click="toggleAllNacesFromIaf"
+                type="button"
+                class="btn-toggle-iaf"
+                :class="{ 'all-selected': areAllIafNacesSelected }"
+              >
+                <i :class="areAllIafNacesSelected ? 'bi bi-check-square-fill' : 'bi bi-square'"></i>
+                {{ areAllIafNacesSelected ? 'Desmarcar' : 'Selecionar' }} todos IAF {{ selectedIafFilter }}
+              </button>
             </div>
 
             <div class="nace-list">
@@ -426,6 +449,7 @@ const toast = useToast();
 const loading = ref(false);
 const saving = ref(false);
 const naceSearch = ref('');
+const selectedIafFilter = ref('');
 const paisSearch = ref('');
 const estadoSearch = ref('');
 const cidadeSearch = ref('');
@@ -493,14 +517,36 @@ const produtosDisponiveis = computed(() => {
   const produtosAdicionados = selectedPricing.value.map(p => String(p.produtoId));
   return produtos.filter(p => !produtosAdicionados.includes(String(p.id)));
 });
+
+const iafsDisponiveis = computed(() => {
+  const iafs = [...new Set(nacesStore.naces.map(n => n.iaf))];
+  return iafs.sort();
+});
+
 const filteredNaces = computed(() => {
-  if (!naceSearch.value) return nacesStore.naces;
-  const termo = naceSearch.value.toLowerCase();
-  return nacesStore.naces.filter(n => 
-    n.nace.toLowerCase().includes(termo) ||
-    n.descricao.toLowerCase().includes(termo) ||
-    n.iaf.includes(termo)
-  );
+  let resultado = nacesStore.naces;
+  
+  // Filtro por IAF
+  if (selectedIafFilter.value) {
+    resultado = resultado.filter(n => n.iaf === selectedIafFilter.value);
+  }
+  
+  // Filtro por texto
+  if (naceSearch.value) {
+    const termo = naceSearch.value.toLowerCase();
+    resultado = resultado.filter(n => 
+      n.nace.toLowerCase().includes(termo) ||
+      n.descricao.toLowerCase().includes(termo)
+    );
+  }
+  
+  return resultado;
+});
+
+const areAllIafNacesSelected = computed(() => {
+  if (!selectedIafFilter.value) return false;
+  const nacesDoIaf = filteredNaces.value.map(n => n.id);
+  return nacesDoIaf.length > 0 && nacesDoIaf.every(id => selectedNaces.value.includes(id));
 });
 
 const fetchPaises = async () => {
@@ -774,6 +820,19 @@ const toggleNormaQualificacao = (normaId, campo, valor) => {
   normasQualificacoes.value[normaId][campo] = valor;
 };
 
+const toggleAllNacesFromIaf = () => {
+  const nacesDoIaf = filteredNaces.value.map(n => n.id);
+  
+  if (areAllIafNacesSelected.value) {
+    // Desmarcar todos
+    selectedNaces.value = selectedNaces.value.filter(id => !nacesDoIaf.includes(id));
+  } else {
+    // Marcar todos (adiciona apenas os que ainda não estão selecionados)
+    const novosNaces = nacesDoIaf.filter(id => !selectedNaces.value.includes(id));
+    selectedNaces.value = [...selectedNaces.value, ...novosNaces];
+  }
+};
+
 const handleSubmit = async () => {
   saving.value = true;
   try {
@@ -797,17 +856,27 @@ const handleSubmit = async () => {
       for (const normaId of selectedNormas.value) {
         try {
           const qualificacoes = normasQualificacoes.value[normaId] || {};
+          
+          // Validação: precisa ser pelo menos Líder OU Especialista
+          if (!qualificacoes.auditorLider && !qualificacoes.especialista) {
+            const normaNome = normasStore.normas.find(n => n.id === normaId)?.norma || 'Norma';
+            toast.error(`${normaNome}: Selecione pelo menos uma qualificação (Auditor Líder ou Especialista)`);
+            throw new Error('Qualificação não selecionada');
+          }
+          
           console.log(`Chamando addNorma(${auditor.id}, ${normaId}, ${qualificacoes.auditorLider}, ${qualificacoes.especialista})`);
           await auditoresStore.addNorma(
             auditor.id, 
             normaId,
-            qualificacoes.auditorLider || false,
-            qualificacoes.especialista || false
+            qualificacoes.auditorLider,
+            qualificacoes.especialista
           );
           console.log(`✓ Norma ${normaId} adicionada com sucesso`);
         } catch (error) {
           console.error(`✗ Erro ao adicionar norma ${normaId}:`, error);
           console.error('Resposta do erro:', error.response?.data);
+          // Para a execução se houver erro de validação
+          throw error;
         }
       }
     }
@@ -1016,12 +1085,24 @@ const handleSubmit = async () => {
 
 .norma-qualificacoes {
   display: flex;
-  gap: 12px;
+  flex-direction: column;
+  gap: 8px;
   margin-left: 28px;
   padding: 12px;
   background: #f8f9fa;
   border-radius: 6px;
   border-left: 3px solid #e70d0c;
+}
+
+.qualificacoes-header {
+  margin-bottom: 4px;
+}
+
+.qualificacoes-required {
+  font-size: 12px;
+  font-weight: 600;
+  color: #dc3545;
+  font-style: italic;
 }
 
 .qualificacao-checkbox {
@@ -1073,9 +1154,72 @@ const handleSubmit = async () => {
   font-weight: 600;
 }
 
+.nace-filters {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 12px;
+  margin-bottom: 16px;
+  align-items: center;
+}
+
+.iaf-filter-select {
+  padding: 12px 14px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 14px;
+  font-family: 'Red Hat Text', sans-serif;
+  background: white;
+  cursor: pointer;
+  transition: all 0.2s;
+  min-width: 180px;
+}
+
+.iaf-filter-select:focus {
+  outline: none;
+  border-color: #e70d0c;
+  box-shadow: 0 0 0 3px rgba(231, 13, 12, 0.1);
+}
+
+.btn-toggle-iaf {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  background: white;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  color: #333;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: 'Red Hat Text', sans-serif;
+  white-space: nowrap;
+}
+
+.btn-toggle-iaf:hover {
+  border-color: #e70d0c;
+  color: #e70d0c;
+  background: #fff5f5;
+}
+
+.btn-toggle-iaf.all-selected {
+  background: #e70d0c;
+  border-color: #e70d0c;
+  color: white;
+}
+
+.btn-toggle-iaf.all-selected:hover {
+  background: #c00b0a;
+  border-color: #c00b0a;
+}
+
+.btn-toggle-iaf i {
+  font-size: 16px;
+}
+
 .search-box {
   position: relative;
-  margin-bottom: 16px;
 }
 
 .search-box i {
