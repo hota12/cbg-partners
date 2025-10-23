@@ -328,22 +328,42 @@
             </div>
 
             <div class="tags-container">
-              <div v-for="norma in auditor.Normas" :key="norma.id" class="tag">
+              <div v-for="norma in auditor.Normas" :key="norma.id" class="tag tag-norma">
                 <img 
                   :src="`/selos/${norma.normaId}.png`" 
                   :alt="getNormaLabel(norma.normaId)"
                   class="tag-icon"
                   @error="e => e.target.style.display='none'"
                 />
-                <span>{{ getNormaLabel(norma.normaId) }}</span>
-                <button 
-                  v-if="canEdit"
-                  @click="removeNorma(norma.normaId)" 
-                  class="tag-remove"
-                  title="Remover"
-                >
-                  <i class="bi bi-x"></i>
-                </button>
+                <div class="norma-info">
+                  <span class="norma-nome">{{ getNormaLabel(norma.normaId) }}</span>
+                  <div v-if="norma.auditorLider || norma.especialista" class="norma-badges">
+                    <span v-if="norma.auditorLider" class="mini-badge badge-lider" title="Auditor Líder">
+                      <i class="bi bi-star-fill"></i>
+                      Líder
+                    </span>
+                    <span v-if="norma.especialista" class="mini-badge badge-especialista" title="Especialista">
+                      <i class="bi bi-award-fill"></i>
+                      Especialista
+                    </span>
+                  </div>
+                </div>
+                <div v-if="canEdit" class="tag-actions">
+                  <button 
+                    @click="openEditNorma(norma)" 
+                    class="tag-edit"
+                    title="Editar qualificações"
+                  >
+                    <i class="bi bi-pencil"></i>
+                  </button>
+                  <button 
+                    @click="removeNorma(norma.normaId)" 
+                    class="tag-remove"
+                    title="Remover"
+                  >
+                    <i class="bi bi-x"></i>
+                  </button>
+                </div>
               </div>
               
               <button v-if="canEdit" @click="showAddNorma = true" class="tag-add">
@@ -633,6 +653,32 @@
                 <span>{{ norma.norma }}</span>
               </label>
             </div>
+            
+            <div v-if="selectedNormaId" class="norma-options">
+              <h4>Qualificações para esta norma:</h4>
+              <div class="checkbox-options">
+                <label class="checkbox-option">
+                  <input 
+                    type="checkbox" 
+                    v-model="normaQualificacoes.auditorLider"
+                  />
+                  <div class="option-info">
+                    <i class="bi bi-star-fill"></i>
+                    <span class="option-label">Auditor Líder</span>
+                  </div>
+                </label>
+                <label class="checkbox-option">
+                  <input 
+                    type="checkbox" 
+                    v-model="normaQualificacoes.especialista"
+                  />
+                  <div class="option-info">
+                    <i class="bi bi-award-fill"></i>
+                    <span class="option-label">Especialista</span>
+                  </div>
+                </label>
+              </div>
+            </div>
           </div>
           <div class="modal-footer">
             <button @click="showAddNorma = false" class="btn btn-secondary">
@@ -640,6 +686,63 @@
             </button>
             <ButtonLoader @click="addNorma" :loading="adding">
               Adicionar
+            </ButtonLoader>
+          </div>
+        </div>
+      </div>
+
+      <!-- Edit Norma -->
+      <div v-if="showEditNorma" class="modal-overlay" @click="showEditNorma = false">
+        <div class="modal-content" @click.stop>
+          <div class="modal-header">
+            <h3>Editar Qualificações da Norma</h3>
+            <button @click="showEditNorma = false" class="modal-close">
+              <i class="bi bi-x"></i>
+            </button>
+          </div>
+          <div class="modal-body">
+            <div class="norma-edit-info">
+              <img 
+                :src="`/selos/${editingNorma?.normaId}.png`" 
+                :alt="getNormaLabel(editingNorma?.normaId)"
+                class="norma-edit-icon"
+                @error="e => e.target.style.display='none'"
+              />
+              <h4>{{ getNormaLabel(editingNorma?.normaId) }}</h4>
+            </div>
+            
+            <div class="norma-options">
+              <h4>Qualificações:</h4>
+              <div class="checkbox-options">
+                <label class="checkbox-option">
+                  <input 
+                    type="checkbox" 
+                    v-model="editNormaQualificacoes.auditorLider"
+                  />
+                  <div class="option-info">
+                    <i class="bi bi-star-fill"></i>
+                    <span class="option-label">Auditor Líder</span>
+                  </div>
+                </label>
+                <label class="checkbox-option">
+                  <input 
+                    type="checkbox" 
+                    v-model="editNormaQualificacoes.especialista"
+                  />
+                  <div class="option-info">
+                    <i class="bi bi-award-fill"></i>
+                    <span class="option-label">Especialista</span>
+                  </div>
+                </label>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button @click="showEditNorma = false" class="btn btn-secondary">
+              Cancelar
+            </button>
+            <ButtonLoader @click="updateNorma" :loading="updating">
+              Salvar Alterações
             </ButtonLoader>
           </div>
         </div>
@@ -842,8 +945,18 @@ const togglingRevisor = ref(false);
 const togglingDesqualificado = ref(false);
 const confirmModalLoading = ref(false);
 const showAddNorma = ref(false);
+const showEditNorma = ref(false);
+const editingNorma = ref(null);
+const editNormaQualificacoes = ref({
+  auditorLider: false,
+  especialista: false
+});
 const showAddNace = ref(false);
 const selectedNormaId = ref(null);
+const normaQualificacoes = ref({
+  auditorLider: false,
+  especialista: false
+});
 const showConfirmModal = ref(false);
 const confirmModal = ref({
   title: '',
@@ -1334,17 +1447,57 @@ const addNorma = async () => {
   if (!selectedNormaId.value) return;
   adding.value = true;
   try {
-    await auditoresStore.addNorma(auditor.value.id, selectedNormaId.value);
+    await auditoresStore.addNorma(
+      auditor.value.id, 
+      selectedNormaId.value,
+      normaQualificacoes.value.auditorLider,
+      normaQualificacoes.value.especialista
+    );
     // Recarrega os dados do auditor
     await auditoresStore.fetchAuditor(auditor.value.id);
     auditor.value = auditoresStore.auditorAtual;
     toast.success('Norma adicionada');
     showAddNorma.value = false;
     selectedNormaId.value = null;
+    normaQualificacoes.value = { auditorLider: false, especialista: false };
   } catch (error) {
     toast.error('Erro ao adicionar norma');
   } finally {
     adding.value = false;
+  }
+};
+
+const openEditNorma = (norma) => {
+  editingNorma.value = norma;
+  editNormaQualificacoes.value = {
+    auditorLider: norma.auditorLider || false,
+    especialista: norma.especialista || false
+  };
+  showEditNorma.value = true;
+};
+
+const updateNorma = async () => {
+  if (!editingNorma.value) return;
+  updating.value = true;
+  try {
+    // Usa a mesma rota de adicionar - ela atualizará se a associação já existir
+    await auditoresStore.addNorma(
+      auditor.value.id, 
+      editingNorma.value.normaId,
+      editNormaQualificacoes.value.auditorLider,
+      editNormaQualificacoes.value.especialista
+    );
+    // Recarrega os dados do auditor
+    await auditoresStore.fetchAuditor(auditor.value.id);
+    auditor.value = auditoresStore.auditorAtual;
+    toast.success('Qualificações atualizadas');
+    showEditNorma.value = false;
+    editingNorma.value = null;
+    editNormaQualificacoes.value = { auditorLider: false, especialista: false };
+  } catch (error) {
+    toast.error('Erro ao atualizar qualificações');
+  } finally {
+    updating.value = false;
   }
 };
 
@@ -2002,10 +2155,87 @@ const formatDate = (date) => {
   font-size: 14px;
 }
 
+.tag-norma {
+  flex-direction: row;
+  align-items: center;
+}
+
+.norma-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.norma-nome {
+  font-weight: 500;
+  color: #333;
+}
+
+.norma-badges {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.mini-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.mini-badge i {
+  font-size: 10px;
+}
+
+.badge-lider {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.badge-especialista {
+  background: #d4edda;
+  color: #155724;
+}
+
 .tag-icon {
   width: 24px;
   height: 24px;
   object-fit: contain;
+  flex-shrink: 0;
+}
+
+.tag-actions {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.tag-edit {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  background: transparent;
+  border: none;
+  color: #007bff;
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 14px;
+  padding: 0;
+  transition: all 0.2s;
+}
+
+.tag-edit:hover {
+  background: #007bff;
+  color: white;
 }
 
 .tag-remove {
@@ -2021,6 +2251,7 @@ const formatDate = (date) => {
   border-radius: 4px;
   font-size: 18px;
   padding: 0;
+  transition: all 0.2s;
 }
 
 .tag-remove:hover {
@@ -2552,6 +2783,90 @@ input:checked + .slider:before {
 .selection-item input[type="radio"] {
   margin-top: 2px;
   cursor: pointer;
+}
+
+.norma-options {
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 2px solid #f0f0f0;
+}
+
+.norma-options h4 {
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+  margin: 0 0 16px 0;
+}
+
+.checkbox-options {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.checkbox-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  background: #f8f9fa;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.checkbox-option:hover {
+  border-color: #e70d0c;
+  background: white;
+}
+
+.checkbox-option input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  accent-color: #e70d0c;
+}
+
+.option-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+
+.option-info i {
+  font-size: 18px;
+  color: #e70d0c;
+}
+
+.option-label {
+  font-size: 15px;
+  font-weight: 500;
+  color: #333;
+}
+
+.norma-edit-info {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  margin-bottom: 24px;
+}
+
+.norma-edit-icon {
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+}
+
+.norma-edit-info h4 {
+  font-size: 18px;
+  font-weight: 600;
+  color: #333;
+  margin: 0;
 }
 
 .modal-footer {

@@ -190,9 +190,14 @@ export const useAuditoresStore = defineStore('auditores', {
       }
     },
 
-    async addNorma(auditorId, normaId) {
+    async addNorma(auditorId, normaId, auditorLider = false, especialista = false) {
       try {
-        const payload = { auditorId: String(auditorId), normaId: String(normaId) };
+        const payload = { 
+          auditorId: String(auditorId), 
+          normaId: String(normaId),
+          auditorLider: Boolean(auditorLider),
+          especialista: Boolean(especialista)
+        };
         console.log('addNorma - Enviando payload:', payload);
         const response = await api.post('/auditor/norma', payload);
         console.log('addNorma - Resposta:', response.data);

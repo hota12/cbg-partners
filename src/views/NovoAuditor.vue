@@ -243,14 +243,41 @@
           </h2>
           
           <div class="normas-selection">
-            <label v-for="norma in normas" :key="norma.id" class="checkbox-label">
-              <input 
-                type="checkbox" 
-                :value="norma.id"
-                v-model="selectedNormas"
-              />
-              <span>{{ norma.norma }}</span>
-            </label>
+            <div v-for="norma in normas" :key="norma.id" class="norma-item">
+              <label class="checkbox-label">
+                <input 
+                  type="checkbox" 
+                  :value="norma.id"
+                  v-model="selectedNormas"
+                />
+                <span>{{ norma.norma }}</span>
+              </label>
+              
+              <div v-if="selectedNormas.includes(norma.id)" class="norma-qualificacoes">
+                <label class="qualificacao-checkbox">
+                  <input 
+                    type="checkbox" 
+                    :checked="getNormaQualificacao(norma.id, 'auditorLider')"
+                    @change="toggleNormaQualificacao(norma.id, 'auditorLider', $event.target.checked)"
+                  />
+                  <span class="qualificacao-label">
+                    <i class="bi bi-star-fill"></i>
+                    Auditor Líder
+                  </span>
+                </label>
+                <label class="qualificacao-checkbox">
+                  <input 
+                    type="checkbox" 
+                    :checked="getNormaQualificacao(norma.id, 'especialista')"
+                    @change="toggleNormaQualificacao(norma.id, 'especialista', $event.target.checked)"
+                  />
+                  <span class="qualificacao-label">
+                    <i class="bi bi-award-fill"></i>
+                    Especialista
+                  </span>
+                </label>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -425,6 +452,7 @@ const form = ref({
 });
 
 const selectedNormas = ref([]);
+const normasQualificacoes = ref({});
 const selectedNaces = ref([]);
 const selectedPricing = ref([]);
 const newPricing = ref({
@@ -732,6 +760,20 @@ const handleCNPJInput = (event) => {
   form.value.cnpj = formatCNPJ(event.target.value);
 };
 
+const getNormaQualificacao = (normaId, campo) => {
+  return normasQualificacoes.value[normaId]?.[campo] || false;
+};
+
+const toggleNormaQualificacao = (normaId, campo, valor) => {
+  if (!normasQualificacoes.value[normaId]) {
+    normasQualificacoes.value[normaId] = {
+      auditorLider: false,
+      especialista: false
+    };
+  }
+  normasQualificacoes.value[normaId][campo] = valor;
+};
+
 const handleSubmit = async () => {
   saving.value = true;
   try {
@@ -754,8 +796,14 @@ const handleSubmit = async () => {
       console.log('Adicionando normas:', selectedNormas.value);
       for (const normaId of selectedNormas.value) {
         try {
-          console.log(`Chamando addNorma(${auditor.id}, ${normaId})`);
-          await auditoresStore.addNorma(auditor.id, normaId);
+          const qualificacoes = normasQualificacoes.value[normaId] || {};
+          console.log(`Chamando addNorma(${auditor.id}, ${normaId}, ${qualificacoes.auditorLider}, ${qualificacoes.especialista})`);
+          await auditoresStore.addNorma(
+            auditor.id, 
+            normaId,
+            qualificacoes.auditorLider || false,
+            qualificacoes.especialista || false
+          );
           console.log(`✓ Norma ${normaId} adicionada com sucesso`);
         } catch (error) {
           console.error(`✗ Erro ao adicionar norma ${normaId}:`, error);
@@ -923,20 +971,32 @@ const handleSubmit = async () => {
   gap: 10px;
 }
 
+.norma-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  background: white;
+  transition: all 0.2s;
+}
+
+.norma-item:hover {
+  border-color: #e70d0c;
+}
+
 .checkbox-label {
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  padding: 12px;
-  border: 1px solid #e0e0e0;
-  border-radius: 8px;
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .checkbox-label:hover {
   background: #f8f9fa;
-  border-color: #e70d0c;
+  border-radius: 4px;
 }
 
 .checkbox-label input[type="checkbox"] {
@@ -944,12 +1004,62 @@ const handleSubmit = async () => {
   width: 18px;
   height: 18px;
   cursor: pointer;
+  accent-color: #e70d0c;
 }
 
 .checkbox-label span {
   flex: 1;
   font-size: 14px;
   color: #333;
+  font-weight: 500;
+}
+
+.norma-qualificacoes {
+  display: flex;
+  gap: 12px;
+  margin-left: 28px;
+  padding: 12px;
+  background: #f8f9fa;
+  border-radius: 6px;
+  border-left: 3px solid #e70d0c;
+}
+
+.qualificacao-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 6px 12px;
+  background: white;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  transition: all 0.2s;
+}
+
+.qualificacao-checkbox:hover {
+  border-color: #e70d0c;
+  box-shadow: 0 2px 4px rgba(231, 13, 12, 0.1);
+}
+
+.qualificacao-checkbox input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: #e70d0c;
+}
+
+.qualificacao-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #333;
+}
+
+.qualificacao-label i {
+  font-size: 14px;
+  color: #e70d0c;
 }
 
 .iaf-badge {
